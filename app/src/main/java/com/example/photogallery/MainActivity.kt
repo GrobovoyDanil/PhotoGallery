@@ -13,7 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.photogallery.ui.theme.PhotoGalleryTheme
+import com.example.photogallery.ui.PhotoGalleryScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,15 +22,5 @@ class MainActivity : ComponentActivity() {
         setContent {
             PhotoGalleryScreen()
         }
-    }
-}
-
-@Composable
-fun PhotoGalleryScreen() {
-    androidx.compose.foundation.layout.Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Gray)
-    ) {
     }
 }
