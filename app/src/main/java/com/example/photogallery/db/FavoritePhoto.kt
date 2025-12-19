@@ -1,6 +1,5 @@
 package com.example.photogallery.db
 
-
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
