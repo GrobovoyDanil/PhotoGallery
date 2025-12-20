@@ -40,6 +40,9 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.shape.CircleShape
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+
 class PhotoGalleryViewModel : ViewModel() {
     lateinit var dao: FavoritePhotoDao
 
@@ -58,6 +61,12 @@ class PhotoGalleryViewModel : ViewModel() {
                     imageUrl = photo.imageUrl
                 )
             )
+        }
+    }
+
+    fun removeFromFavorites(photo: PhotoItem) {
+        viewModelScope.launch {
+            dao.deleteById(photo.id)
         }
     }
 
@@ -101,6 +110,10 @@ class PhotoGalleryViewModel : ViewModel() {
     fun searchPhotos(query: String) {
         viewModelScope.launch {
             try {
+                if (query.isBlank()) {
+                    loadPhotos() // возвращаем дефолтный список
+                    return@launch
+                }
                 val response = PhotoRepository.api.searchPhotos(
                     apiKey = "c19cc8f4173598aa3908927fd6adbe88",
                     text = query
@@ -116,6 +129,19 @@ class PhotoGalleryViewModel : ViewModel() {
             }
         }
     }
+
+    suspend fun toggleFavorite(photo: PhotoItem): List<FavoritePhoto> {
+        val currentFavorites = dao.getAll().toMutableList()
+        val exists = currentFavorites.any { it.id == photo.id }
+        if (exists) {
+            dao.deleteById(photo.id)
+            currentFavorites.removeAll { it.id == photo.id }
+        } else {
+            dao.insert(FavoritePhoto(photo.id, photo.title, photo.imageUrl ?: ""))
+            currentFavorites.add(FavoritePhoto(photo.id, photo.title, photo.imageUrl ?: ""))
+        }
+        return currentFavorites
+    }
 }
 
 @Composable
@@ -128,7 +154,32 @@ fun PhotoGalleryScreen(
     var searchText by remember { mutableStateOf("") }
     var favorites by remember { mutableStateOf<List<FavoritePhoto>>(emptyList()) }
 
-    // Загружаем избранное
+    var showPhotoDialog by remember { mutableStateOf<PhotoItem?>(null) }
+
+    showPhotoDialog?.let { photo ->
+        AlertDialog(
+            onDismissRequest = { showPhotoDialog = null },
+            title = { Text(photo.title) },
+            text = {
+                Column {
+                    AsyncImage(
+                        model = photo.imageUrl,
+                        contentDescription = photo.title,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPhotoDialog = null }) {
+                    Text("Закрыть")
+                }
+            }
+        )
+    }
+
     LaunchedEffect(Unit) {
         favorites = viewModel.getFavorites()
     }
@@ -176,13 +227,37 @@ fun PhotoGalleryScreen(
             favorites.map { PhotoItem(it.id, it.title, it.imageUrl) }
         } else photos
 
+//        PhotoList(
+//            photos = displayPhotos,
+//            favorites = favorites,
+//            modifier = Modifier.padding(paddingValues),
+//            onFavoriteClick = { photo ->
+//                viewModel.addToFavorites(photo)
+//                if (favorites.none { it.id == photo.id }) {
+//                    favorites = favorites + FavoritePhoto(photo.id, photo.title, photo.imageUrl ?: "")
+//                }
+//            },
+//            onRemoveFavorite = { photo ->
+//                viewModel.removeFromFavorites(photo)
+//                favorites = favorites.filter { it.id != photo.id }
+//            },
+//            onPhotoClick = { photo ->
+//                showPhotoDialog = photo
+//            }
+//        )
+
+        val scope = rememberCoroutineScope()
+
         PhotoList(
             photos = displayPhotos,
             favorites = favorites,
             modifier = Modifier.padding(paddingValues),
-            onFavoriteClick = { photo ->
-                viewModel.addToFavorites(photo)
-                favorites = favorites + FavoritePhoto(photo.id, photo.title, photo.imageUrl ?: "")
+            onPhotoClick = { photo -> showPhotoDialog = photo },
+            onFavoriteToggle = { photo ->
+                scope.launch {
+                    val updatedFavorites = viewModel.toggleFavorite(photo)
+                    favorites = updatedFavorites
+                }
             }
         )
     }
@@ -193,8 +268,13 @@ fun PhotoList(
     photos: List<PhotoItem>,
     favorites: List<FavoritePhoto>,
     modifier: Modifier = Modifier,
-    onFavoriteClick: (PhotoItem) -> Unit
+//    onFavoriteClick: (PhotoItem) -> Unit,
+//    onRemoveFavorite: (PhotoItem) -> Unit,
+    onPhotoClick: (PhotoItem) -> Unit,
+    onFavoriteToggle: (PhotoItem) -> Unit,
 ) {
+    // val scope = rememberCoroutineScope()
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         modifier = modifier
@@ -207,7 +287,19 @@ fun PhotoList(
             Box(
                 modifier = Modifier
                     .padding(4.dp)
-                    .clickable { onFavoriteClick(photo) }
+//                    .clickable {
+//                        if (favorites.any { it.id == photo.id }) {
+//                            onRemoveFavorite(photo)
+//                        } else {
+//                            onFavoriteClick(photo)
+//                        }
+//                    }
+                    .pointerInput(photo.id) {
+                        detectTapGestures(
+                            onTap = { onPhotoClick(photo) },
+                            onDoubleTap = { onFavoriteToggle(photo) }
+                        )
+                    }
             ) {
                 AsyncImage(
                     model = photo.imageUrl,
