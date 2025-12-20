@@ -24,9 +24,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import com.example.photogallery.db.DatabaseProvider
 import com.example.photogallery.db.FavoritePhoto
 import com.example.photogallery.db.FavoritePhotoDao
+import androidx.compose.material3.AlertDialog
 
 class PhotoGalleryViewModel : ViewModel() {
     lateinit var dao: FavoritePhotoDao
@@ -62,6 +65,7 @@ class PhotoGalleryViewModel : ViewModel() {
     private val _photos = MutableStateFlow<List<PhotoItem>>(emptyList())
     val photos: StateFlow<List<PhotoItem>> = _photos
 
+
     init {
         loadPhotos()
     }
@@ -84,6 +88,25 @@ class PhotoGalleryViewModel : ViewModel() {
             }
         }
     }
+
+    fun searchPhotos(query: String) {
+        viewModelScope.launch {
+            try {
+                val response = PhotoRepository.api.searchPhotos(
+                    apiKey = "c19cc8f4173598aa3908927fd6adbe88",
+                    text = query
+                )
+
+                if (response.stat == "ok") {
+                    _photos.value = response.photos.photo
+                } else {
+                    android.util.Log.e("FLICKR", "Search API error")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("FLICKR", "Search error", e)
+            }
+        }
+    }
 }
 
 @Composable
@@ -93,11 +116,15 @@ fun PhotoGalleryScreen(
     val photos by viewModel.photos.collectAsState()
     var showFavorites by remember { mutableStateOf(false) }
 
+    var showSearchDialog by remember { mutableStateOf(false) }
+    var searchText by remember { mutableStateOf("") }
+
+
     Scaffold(
         topBar = {
             PhotoGalleryTopBar(
                 onSearchClick = {
-                    // позже
+                    showSearchDialog = true
                 },
                 onFavoritesClick = {
                     showFavorites = !showFavorites
@@ -109,6 +136,32 @@ fun PhotoGalleryScreen(
         }
     ) { paddingValues ->
 
+        if (showSearchDialog) {
+            AlertDialog(
+                onDismissRequest = { showSearchDialog = false },
+                title = { Text("Поиск фото") },
+                text = {
+                    TextField(
+                        value = searchText,
+                        onValueChange = { searchText = it },
+                        label = { Text("Ключевое слово") }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.searchPhotos(searchText)
+                        showSearchDialog = false
+                    }) {
+                        Text("Искать")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSearchDialog = false }) {
+                        Text("Отмена")
+                    }
+                }
+            )
+        }
         if (showFavorites) {
             FavoritesScreen(
                 modifier = Modifier.padding(paddingValues),
